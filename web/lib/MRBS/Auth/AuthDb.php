@@ -6,7 +6,6 @@ use MRBS\DB\DB;
 use MRBS\Language;
 use MRBS\MailQueue;
 use MRBS\User;
-use MRBS\GoogleLogin;
 use PHPMailer\PHPMailer\PHPMailer;
 use function MRBS\_tbl;
 use function MRBS\auth;
@@ -94,13 +93,6 @@ class AuthDb extends AuthDbAbstract
     $valid_usernames = array_merge($valid_usernames, $this->validateEmail($user, $pass));
     $valid_usernames = array_unique($valid_usernames);
 
-    // If Google sign-in is enabled then users whose username is an email address at one of the Google domains
-    // can only log in with Google, even if they have a password.  This is applied to the result, rather
-    // than in validateUsername() and validateEmail(), so that it covers a login by username and by email address.
-    $valid_usernames = array_values(array_filter($valid_usernames, function ($username) {
-        return !GoogleLogin::isGoogleOnlyUser($username);
-      }));
-
     if (count($valid_usernames) == 1)
     {
       $result = $valid_usernames[0];
@@ -137,7 +129,7 @@ class AuthDb extends AuthDbAbstract
    *   false    - The pair are invalid or do not exist
    *   string   - The validated username
    */
-  private function validateUsername(
+  protected function validateUsername(
     #[\SensitiveParameter]
     ?string $user,
     #[\SensitiveParameter]
@@ -327,11 +319,6 @@ class AuthDb extends AuthDbAbstract
       }
     }
 
-    // Users who can only log in with Google have no use for a password, so don't send them a reset link
-    $possible_users = array_values(array_filter($possible_users, function ($possible_user) {
-        return !GoogleLogin::isGoogleOnlyUser($possible_user['name']);
-      }));
-
     if (!empty($possible_users))
     {
       // Generate a key
@@ -383,12 +370,6 @@ class AuthDb extends AuthDbAbstract
   public function isValidReset(?string $user, ?string $key) : bool
   {
     if (!isset($user) || !isset($key) || ($user === '') || ($key === ''))
-    {
-      return false;
-    }
-
-    // This also invalidates any reset key issued before Google sign-in was enabled
-    if (GoogleLogin::isGoogleOnlyUser($user))
     {
       return false;
     }
@@ -821,7 +802,7 @@ class AuthDb extends AuthDbAbstract
    *
    * @return array An array of rows for all users with the email address `$email`.
    */
-  private function getUsersByEmail(string $email) : array
+  protected function getUsersByEmail(string $email) : array
   {
     global $auth;
 
